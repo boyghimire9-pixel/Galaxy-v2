@@ -266,4 +266,326 @@ async def on_member_update(
             )
 
             await log_channel.send(embed=embed)
-          
+          # ==========================
+# MESSAGE DELETE LOG
+# ==========================
+
+@commands.Cog.listener()
+async def on_message_delete(self, message: discord.Message):
+
+    if message.author.bot:
+        return
+
+    async with aiosqlite.connect(DATABASE) as db:
+        cursor = await db.execute(
+            """
+            SELECT channel_id
+            FROM log_settings
+            WHERE guild_id=?
+            """,
+            (message.guild.id,)
+        )
+        data = await cursor.fetchone()
+
+    if not data:
+        return
+
+    channel = message.guild.get_channel(data[0])
+
+    if channel:
+
+        embed = discord.Embed(
+            title="🗑️ Message Deleted",
+            color=0xED4245
+        )
+
+        embed.add_field(name="User", value=f"{message.author} ({message.author.id})", inline=False)
+        embed.add_field(name="Channel", value=message.channel.mention, inline=False)
+        embed.add_field(
+            name="Content",
+            value=message.content[:1024] if message.content else "No text / embed-only message",
+            inline=False
+        )
+
+        if message.attachments:
+            embed.add_field(
+                name="Attachments",
+                value="\n".join([a.url for a in message.attachments]),
+                inline=False
+            )
+
+        await channel.send(embed=embed)
+
+
+# ==========================
+# MESSAGE EDIT LOG
+# ==========================
+
+@commands.Cog.listener()
+async def on_message_edit(self, before: discord.Message, after: discord.Message):
+
+    if before.author.bot:
+        return
+
+    if before.content == after.content:
+        return
+
+    async with aiosqlite.connect(DATABASE) as db:
+        cursor = await db.execute(
+            """
+            SELECT channel_id
+            FROM log_settings
+            WHERE guild_id=?
+            """,
+            (before.guild.id,)
+        )
+        data = await cursor.fetchone()
+
+    if not data:
+        return
+
+    channel = before.guild.get_channel(data[0])
+
+    if channel:
+
+        embed = discord.Embed(
+            title="✏️ Message Edited",
+            color=0xFEE75C
+        )
+
+        embed.add_field(name="User", value=f"{before.author} ({before.author.id})", inline=False)
+        embed.add_field(name="Channel", value=before.channel.mention, inline=False)
+
+        embed.add_field(
+            name="Before",
+            value=before.content[:1024] if before.content else "None",
+            inline=False
+        )
+
+        embed.add_field(
+            name="After",
+            value=after.content[:1024] if after.content else "None",
+            inline=False
+        )
+
+        await channel.send(embed=embed)
+        # ==========================
+# ROLE UPDATE LOG
+# ==========================
+
+@commands.Cog.listener()
+async def on_member_update(self, before: discord.Member, after: discord.Member):
+
+    if before.bot:
+        return
+
+    if before.roles == after.roles:
+        return
+
+    async with aiosqlite.connect(DATABASE) as db:
+        cursor = await db.execute(
+            """
+            SELECT channel_id
+            FROM log_settings
+            WHERE guild_id=?
+            """,
+            (before.guild.id,)
+        )
+        data = await cursor.fetchone()
+
+    if not data:
+        return
+
+    channel = before.guild.get_channel(data[0])
+
+    if channel:
+
+        before_roles = set(before.roles)
+        after_roles = set(after.roles)
+
+        added = after_roles - before_roles
+        removed = before_roles - after_roles
+
+        embed = discord.Embed(
+            title="🎭 Role Update",
+            color=0x5865F2
+        )
+
+        embed.add_field(
+            name="User",
+            value=f"{before} ({before.id})",
+            inline=False
+        )
+
+        if added:
+            embed.add_field(
+                name="➕ Added Roles",
+                value=", ".join(r.mention for r in added if r.name != "@everyone"),
+                inline=False
+            )
+
+        if removed:
+            embed.add_field(
+                name="➖ Removed Roles",
+                value=", ".join(r.mention for r in removed if r.name != "@everyone"),
+                inline=False
+            )
+
+        await channel.send(embed=embed)
+
+
+# ==========================
+# BOOST TRACKING
+# ==========================
+
+@commands.Cog.listener()
+async def on_member_update(self, before: discord.Member, after: discord.Member):
+
+    if before.guild.premium_subscriber_role in after.roles and before.guild.premium_subscriber_role not in before.roles:
+
+        async with aiosqlite.connect(DATABASE) as db:
+            cursor = await db.execute(
+                """
+                SELECT channel_id
+                FROM log_settings
+                WHERE guild_id=?
+                """,
+                (after.guild.id,)
+            )
+            data = await cursor.fetchone()
+
+        if not data:
+            return
+
+        channel = after.guild.get_channel(data[0])
+
+        if channel:
+
+            embed = discord.Embed(
+                title="🚀 Server Boost!",
+                description=f"Thanks {after.mention} for boosting the server!",
+                color=0xF47FFF
+            )
+
+            embed.set_thumbnail(url=after.display_avatar.url)
+
+            await channel.send(embed=embed)
+
+
+# ==========================
+# MEMBER STATUS UPDATE (optional simple log)
+# ==========================
+
+@commands.Cog.listener()
+async def on_presence_update(self, before: discord.Member, after: discord.Member):
+
+    if before.bot:
+        return
+
+    if before.status != after.status:
+
+        async with aiosqlite.connect(DATABASE) as db:
+            cursor = await db.execute(
+                """
+                SELECT channel_id
+                FROM log_settings
+                WHERE guild_id=?
+                """,
+                (after.guild.id,)
+            )
+            data = await cursor.fetchone()
+
+        if not data:
+            return
+
+        channel = after.guild.get_channel(data[0])
+
+        if channel:
+
+            await channel.send(
+                f"🟡 **{after}** status changed: `{before.status}` ➜ `{after.status}`"
+                )
+        @commands.Cog.listener()
+async def on_member_update(self, before: discord.Member, after: discord.Member):
+
+    if before.bot:
+        return
+
+    async with aiosqlite.connect(DATABASE) as db:
+        cursor = await db.execute(
+            """
+            SELECT channel_id
+            FROM log_settings
+            WHERE guild_id=?
+            """,
+            (after.guild.id,)
+        )
+        data = await cursor.fetchone()
+
+    if not data:
+        return
+
+    channel = after.guild.get_channel(data[0])
+    if not channel:
+        return
+
+    # ==========================
+    # ROLE CHANGE LOG
+    # ==========================
+    if before.roles != after.roles:
+
+        before_roles = set(before.roles)
+        after_roles = set(after.roles)
+
+        added = after_roles - before_roles
+        removed = before_roles - after_roles
+
+        embed = discord.Embed(
+            title="🎭 Role Update",
+            color=0x5865F2
+        )
+
+        embed.add_field(name="User", value=f"{after} ({after.id})", inline=False)
+
+        if added:
+            embed.add_field(
+                name="➕ Added Roles",
+                value=", ".join(r.mention for r in added if r.name != "@everyone"),
+                inline=False
+            )
+
+        if removed:
+            embed.add_field(
+                name="➖ Removed Roles",
+                value=", ".join(r.mention for r in removed if r.name != "@everyone"),
+                inline=False
+            )
+
+        await channel.send(embed=embed)
+
+    # ==========================
+    # BOOST CHECK
+    # ==========================
+    if before.guild.premium_subscriber_role:
+
+        if (before.guild.premium_subscriber_role not in before.roles and
+            before.guild.premium_subscriber_role in after.roles):
+
+            embed = discord.Embed(
+                title="🚀 Server Boost!",
+                description=f"Thanks {after.mention} for boosting the server!",
+                color=0xF47FFF
+            )
+
+            embed.set_thumbnail(url=after.display_avatar.url)
+
+            await channel.send(embed=embed)
+
+    # ==========================
+    # STATUS CHANGE LOG
+    # ==========================
+    if before.status != after.status:
+
+        await channel.send(
+            f"🟡 **{after}** status changed: `{before.status}` ➜ `{after.status}`"
+            )
